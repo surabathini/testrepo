@@ -65,8 +65,14 @@ BEGIN
 END
 \$\$;"
 
+# 5. Allow local connection to replica
+echo "Configuring pg_hba.conf..."
+docker exec -it pg_replica bash -c "echo 'host all postgres 0.0.0.0/0 trust' >> /var/lib/postgresql/data/pg_hba.conf"
+docker exec -it pg_replica bash -c "echo 'host all postgres 0.0.0.0/0 trust' >> /var/lib/postgresql/data/pg_hba.conf"
+docker exec -it pg_replica psql -U postgres -d testdb -c "SELECT pg_reload_conf();"
+
 echo "Checking if subscription exists on replica..."
-SUBSCRIPTION_EXISTS=$(docker exec -it pg_replica psql -U postgres -d testdb -tAc "SELECT 1 FROM pg_subscription WHERE subname = 'mysub'")
+SUBSCRIPTION_EXISTS=$(docker exec pg_replica psql -U postgres -d testdb -tAc "SELECT 1 FROM pg_subscription WHERE subname = 'mysub'")
 
 if [ "$SUBSCRIPTION_EXISTS" != "1" ]; then
     echo "Creating subscription on replica..."

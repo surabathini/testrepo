@@ -3,7 +3,6 @@ version: '3.8'
 services:
   pg_primary:
     image: postgres:14
-    user: "postgres"
     container_name: pg_primary
     restart: always
     environment:
@@ -21,7 +20,6 @@ services:
 
   pg_replica:
     image: postgres:14
-    user: "postgres"
     container_name: pg_replica
     restart: always
     environment:
