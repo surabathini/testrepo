@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  pg_primary:
+    image: postgres:14
+    user: "postgres"
+    container_name: pg_primary
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: testdb
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./data/pg_primary/pgdata:/var/lib/postgresql/data
+      - ./data/pg_primary/postgresql.conf:/etc/postgresql/postgresql.conf
+    command: ["postgres", "-c", "config_file=/etc/postgresql/postgresql.conf"]
+    networks:
+      - pg_network
+
+  pg_replica:
+    image: postgres:14
+    user: "postgres"
+    container_name: pg_replica
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: testdb
+    ports:
+      - "5433:5432"
+    volumes:
+      - ./data/pg_replica/pgdata:/var/lib/postgresql/data
+      - ./data/pg_replica/postgresql.conf:/etc/postgresql/postgresql.conf
+    command: ["postgres", "-c", "config_file=/etc/postgresql/postgresql.conf"]
+    networks:
+      - pg_network
+
+networks:
+  pg_network:
+    driver: bridge

@@ -1,0 +1,38 @@
+# All of this work is from AI tools
+
+# Start the PostgreSQL Containers
+docker-compose up -d
+
+# Run the Replication Setup Script
+chmod +x setup_replication.sh
+./setup_replication.sh
+
+# Test Replication
+chmod +x test_replication.sh
+./test_replication.sh
+
+
+# expected Output (Test Replication)
+ id |  name  
+----+-------
+  1 | Alice
+  2 | Bob
+(2 rows)
+
+ id |  description   
+----+---------------
+  1 | Test Data 1
+  2 | Test Data 2
+(2 rows)
+
+# Additional Notes
+
+# Access from Windows
+Primary DB: postgres://postgres:password@localhost:5432/testdb
+Replica DB: postgres://postgres:password@localhost:5433/testdb
+Use pgAdmin or DBeaver to connect.
+
+# Persistence
+The data is stored in mounted volumes, so it remains even after restarting the containers.
+
+# Now you have a fully working PostgreSQL logical replication setup in Docker + WSL!
