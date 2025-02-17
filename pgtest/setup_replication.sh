@@ -42,6 +42,10 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'mypub' AND tablename = 'mytable2') THEN
         ALTER PUBLICATION mypub ADD TABLE mytable2;
     END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'mytable3') THEN
+        CREATE TABLE mytable3 (id SERIAL PRIMARY KEY, description TEXT);
+    END IF;
+
 END
 \$\$;"
 
