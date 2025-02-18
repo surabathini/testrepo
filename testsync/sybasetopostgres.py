@@ -5,6 +5,7 @@ import psycopg2.extras
 import logging
 import subprocess
 import tempfile
+from psycopg2 import OperationalError
 
 class SybasePostgresSync:
     def __init__(self, sybase_config, postgres_config, table_name, key_column, update_column, special_char_condition):
@@ -35,7 +36,7 @@ class SybasePostgresSync:
         try:
             self.postgres_conn = psycopg2.connect(**self.postgres_config)
             logging.info("Connected to PostgreSQL")
-        except Exception as e:
+        except OperationalError as e:
             logging.error(f"PostgreSQL connection failed: {e}")
             raise
     
@@ -46,6 +47,7 @@ class SybasePostgresSync:
             cursor.execute(query)
             self.last_sync_time = cursor.fetchone()[0]
             cursor.close()
+            logging.info(f"Last sync time fetched: {self.last_sync_time}")
         except Exception as e:
             logging.error(f"Error fetching last sync time: {e}")
     
@@ -56,6 +58,7 @@ class SybasePostgresSync:
             cursor.execute(query)
             deleted_keys = [row[0] for row in cursor.fetchall()]
             cursor.close()
+            logging.info(f"Fetched {len(deleted_keys)} deleted rows from Sybase.")
             return deleted_keys
         except Exception as e:
             logging.error(f"Error fetching deleted rows from Sybase: {e}")
@@ -63,6 +66,7 @@ class SybasePostgresSync:
     
     def apply_deletes_to_postgres(self, deleted_keys):
         if not deleted_keys:
+            logging.info("No deleted rows to apply.")
             return
         
         query = f"DELETE FROM {self.table_name} WHERE {self.key_column} = ANY(%s)"
@@ -71,7 +75,7 @@ class SybasePostgresSync:
             cursor.execute(query, (deleted_keys,))
             self.postgres_conn.commit()
             cursor.close()
-            logging.info("Deleted rows synchronized successfully.")
+            logging.info(f"Deleted {len(deleted_keys)} rows in PostgreSQL.")
         except Exception as e:
             self.postgres_conn.rollback()
             logging.error(f"Error applying deletes to PostgreSQL: {e}")
@@ -84,13 +88,14 @@ class SybasePostgresSync:
         bcp_command = f"bcp {self.table_name} out {fifo_path} -c -U {self.sybase_config['user']} -P {self.sybase_config['password']} -S {self.sybase_config['server']}"
         
         try:
+            logging.info("Starting BCP data export from Sybase.")
             with open(fifo_path, 'r') as fifo:
                 bcp_process = subprocess.Popen(bcp_command, shell=True)
                 with self.postgres_conn.cursor() as cursor:
                     cursor.copy_expert(f"COPY {self.table_name} FROM STDIN WITH CSV", fifo)
                     self.postgres_conn.commit()
                 bcp_process.wait()
-            logging.info("Bulk data synchronized successfully.")
+            logging.info("Bulk data synchronized successfully via BCP.")
         except Exception as e:
             logging.error(f"Error in BCP or COPY command: {e}")
         finally:
@@ -104,6 +109,7 @@ class SybasePostgresSync:
             columns = [col[0] for col in cursor.description]
             data = cursor.fetchall()
             cursor.close()
+            logging.info(f"Fetched {len(data)} special character rows from Sybase.")
             
             if data:
                 placeholders = ', '.join(['%s'] * len(columns))
