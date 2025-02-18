@@ -1,15 +1,19 @@
+import os
 import sybpydb
 import psycopg2
 import psycopg2.extras
 import logging
+import subprocess
+import tempfile
 
 class SybasePostgresSync:
-    def __init__(self, sybase_config, postgres_config, table_name, key_column, update_column):
+    def __init__(self, sybase_config, postgres_config, table_name, key_column, update_column, special_char_condition):
         self.sybase_config = sybase_config
         self.postgres_config = postgres_config
         self.table_name = table_name
         self.key_column = key_column
         self.update_column = update_column
+        self.special_char_condition = special_char_condition
         
         self.sybase_conn = None
         self.postgres_conn = None
@@ -45,21 +49,6 @@ class SybasePostgresSync:
         except Exception as e:
             logging.error(f"Error fetching last sync time: {e}")
     
-    def fetch_sybase_data(self):
-        query = f"SELECT * FROM {self.table_name}"
-        if self.last_sync_time:
-            query += f" WHERE {self.update_column} > '{self.last_sync_time}'"
-        try:
-            cursor = self.sybase_conn.cursor()
-            cursor.execute(query)
-            columns = [col[0] for col in cursor.description]
-            data = cursor.fetchall()
-            cursor.close()
-            return columns, data
-        except Exception as e:
-            logging.error(f"Error fetching data from Sybase: {e}")
-            return None, None
-    
     def fetch_deleted_rows(self):
         query = f"SELECT {self.key_column} FROM deleted_rows_table WHERE table_name = '{self.table_name}'"
         try:
@@ -87,6 +76,53 @@ class SybasePostgresSync:
             self.postgres_conn.rollback()
             logging.error(f"Error applying deletes to PostgreSQL: {e}")
     
+    def sync_via_bcp(self):
+        fifo_path = "/tmp/sybase_bcp_fifo"
+        if not os.path.exists(fifo_path):
+            os.mkfifo(fifo_path)
+        
+        bcp_command = f"bcp {self.table_name} out {fifo_path} -c -U {self.sybase_config['user']} -P {self.sybase_config['password']} -S {self.sybase_config['server']}"
+        
+        try:
+            with open(fifo_path, 'r') as fifo:
+                bcp_process = subprocess.Popen(bcp_command, shell=True)
+                with self.postgres_conn.cursor() as cursor:
+                    cursor.copy_expert(f"COPY {self.table_name} FROM STDIN WITH CSV", fifo)
+                    self.postgres_conn.commit()
+                bcp_process.wait()
+            logging.info("Bulk data synchronized successfully.")
+        except Exception as e:
+            logging.error(f"Error in BCP or COPY command: {e}")
+        finally:
+            os.remove(fifo_path)
+    
+    def sync_special_rows(self):
+        query = f"SELECT * FROM {self.table_name} WHERE {self.special_char_condition}"
+        try:
+            cursor = self.sybase_conn.cursor()
+            cursor.execute(query)
+            columns = [col[0] for col in cursor.description]
+            data = cursor.fetchall()
+            cursor.close()
+            
+            if data:
+                placeholders = ', '.join(['%s'] * len(columns))
+                update_stmt = ', '.join([f"{col} = EXCLUDED.{col}" for col in columns if col != self.key_column])
+                insert_query = f"""
+                    INSERT INTO {self.table_name} ({', '.join(columns)})
+                    VALUES ({placeholders})
+                    ON CONFLICT ({self.key_column}) DO UPDATE
+                    SET {update_stmt}
+                """
+                
+                cursor = self.postgres_conn.cursor()
+                psycopg2.extras.execute_batch(cursor, insert_query, data)
+                self.postgres_conn.commit()
+                cursor.close()
+                logging.info("Special character rows synchronized successfully.")
+        except Exception as e:
+            logging.error(f"Error syncing special character rows: {e}")
+    
     def sync_to_postgres(self):
         if not self.sybase_conn or not self.postgres_conn:
             logging.error("Database connections are not established.")
@@ -95,30 +131,8 @@ class SybasePostgresSync:
         self.fetch_last_sync_time()
         deleted_keys = self.fetch_deleted_rows()
         self.apply_deletes_to_postgres(deleted_keys)
-        
-        columns, data = self.fetch_sybase_data()
-        if not data:
-            logging.info("No new or updated data to sync.")
-            return
-        
-        placeholders = ', '.join(['%s'] * len(columns))
-        update_stmt = ', '.join([f"{col} = EXCLUDED.{col}" for col in columns if col != self.key_column])
-        insert_query = f"""
-            INSERT INTO {self.table_name} ({', '.join(columns)})
-            VALUES ({placeholders})
-            ON CONFLICT ({self.key_column}) DO UPDATE
-            SET {update_stmt}
-        """
-        
-        try:
-            cursor = self.postgres_conn.cursor()
-            psycopg2.extras.execute_batch(cursor, insert_query, data)
-            self.postgres_conn.commit()
-            cursor.close()
-            logging.info("Inserted/Updated rows synchronized successfully.")
-        except Exception as e:
-            self.postgres_conn.rollback()
-            logging.error(f"Error syncing data to PostgreSQL: {e}")
+        self.sync_via_bcp()
+        self.sync_special_rows()
     
     def close_connections(self):
         if self.sybase_conn:
@@ -152,6 +166,7 @@ if __name__ == "__main__":
         'password': 'PASSWORD'
     }
     
-    sync = SybasePostgresSync(sybase_config, postgres_config, 'your_table', 'primary_key_column', 'update_date')
+    special_char_condition = "column_name LIKE '%#%'"
+    
+    sync = SybasePostgresSync(sybase_config, postgres_config, 'your_table', 'primary_key_column', 'update_date', special_char_condition)
     sync.sync()
-
