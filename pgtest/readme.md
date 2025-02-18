@@ -1,5 +1,3 @@
-# All of this work is from AI tools
-
 # Start the PostgreSQL Containers
 docker-compose up -d
 
