@@ -1,10 +1,10 @@
 import os
-import sybpydb
+import sybpydb  # Ensure this module is available
 import psycopg2
 import psycopg2.extras
 import logging
 import subprocess
-import tempfile
+from datetime import datetime
 from psycopg2 import OperationalError
 
 class SybasePostgresSync:
@@ -45,7 +45,7 @@ class SybasePostgresSync:
         try:
             cursor = self.postgres_conn.cursor()
             cursor.execute(query)
-            self.last_sync_time = cursor.fetchone()[0]
+            self.last_sync_time = cursor.fetchone()[0] or datetime.min
             cursor.close()
             logging.info(f"Last sync time fetched: {self.last_sync_time}")
         except Exception as e:
@@ -85,12 +85,17 @@ class SybasePostgresSync:
         if not os.path.exists(fifo_path):
             os.mkfifo(fifo_path)
         
-        bcp_command = f"bcp {self.table_name} out {fifo_path} -c -U {self.sybase_config['user']} -P {self.sybase_config['password']} -S {self.sybase_config['server']}"
+        bcp_command = [
+            "bcp", self.table_name, "out", fifo_path, "-c",
+            "-U", self.sybase_config["user"],
+            "-P", self.sybase_config["password"],
+            "-S", self.sybase_config["server"]
+        ]
         
         try:
             logging.info("Starting BCP data export from Sybase.")
             with open(fifo_path, 'r') as fifo:
-                bcp_process = subprocess.Popen(bcp_command, shell=True)
+                bcp_process = subprocess.Popen(bcp_command)
                 with self.postgres_conn.cursor() as cursor:
                     cursor.copy_expert(f"COPY {self.table_name} FROM STDIN WITH CSV", fifo)
                     self.postgres_conn.commit()
@@ -98,8 +103,12 @@ class SybasePostgresSync:
             logging.info("Bulk data synchronized successfully via BCP.")
         except Exception as e:
             logging.error(f"Error in BCP or COPY command: {e}")
+            if os.path.exists(fifo_path):
+                os.remove(fifo_path)
+            raise
         finally:
-            os.remove(fifo_path)
+            if os.path.exists(fifo_path):
+                os.remove(fifo_path)
     
     def sync_special_rows(self):
         query = f"SELECT * FROM {self.table_name} WHERE {self.special_char_condition}"
