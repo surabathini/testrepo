@@ -27,6 +27,15 @@ if [ "$server_role" == "primary" ]; then
     # Check replication slots
     echo "Checking replication slots..."
     docker exec pg_primary psql -U postgres -d testdb -tAc "SELECT * FROM pg_replication_slots;"
+
+    # Check replicaiton lag
+    echo "Checking replication lag..."
+    docker exec pg_primary psql -U postgres -d testdb -tAc "SELECT * FROM pg_stat_replication;"
+
+    # Check current WAL LSN
+    echo "Checking current WAL LSN..."
+    docker exec pg_primary psql -U postgres -d testdb -tAc "SELECT pg_current_wal_lsn();"
+
 fi
 
 server_role="subscriber"
@@ -42,7 +51,36 @@ if [ "$server_role" == "subscriber" ]; then
     # Check for active replication connections
     echo "Checking active replication connections..."
     docker exec pg_replica psql -U postgres -d testdb -tAc "SELECT * FROM pg_stat_subscription;"
-    
+
+    # Check the last LSN replayed lag
+    echo "Checking last LSN replayed lag..."
+    docker exec pg_replica psql -U postgres -d testdb -tAc "SELECT pg_last_wal_replay_lsn();"
+
+    # on PRIMARY
+    # Compare the above value with the pg_current_wal_lsn() on the publisher to calculate the lag in bytes
+    # SELECT
+    #     pg_wal_lsn_diff(pg_current_wal_lsn(), replay_lsn) AS lag_bytes
+    # FROM pg_stat_replication;
+
+    # on the SUBSCRIBER
+    # SELECT
+    #     pg_wal_lsn_diff(received_lsn, pg_last_wal_replay_lsn()) AS lag_bytes
+    # FROM pg_stat_subscription;
+
+    # Here’s an example query to monitor replication lag in real-time:
+    # SELECT
+    #     application_name,
+    #     client_addr,
+    #     state,
+    #     pg_wal_lsn_diff(pg_current_wal_lsn(), sent_lsn) AS sent_lag_bytes,
+    #     pg_wal_lsn_diff(pg_current_wal_lsn(), write_lsn) AS write_lag_bytes,
+    #     pg_wal_lsn_diff(pg_current_wal_lsn(), flush_lsn) AS flush_lag_bytes,
+    #     pg_wal_lsn_diff(pg_current_wal_lsn(), replay_lsn) AS replay_lag_bytes,
+    #     write_lag,
+    #     flush_lag,
+    #     replay_lag
+    # FROM pg_stat_replication;
+
 else
     echo "No logical replication setup detected on this server."
     exit 1
