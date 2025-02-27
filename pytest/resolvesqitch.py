@@ -2,6 +2,12 @@ import subprocess
 import pandas as pd
 import psycopg2
 
+def fetch_tags():
+    try:
+        subprocess.run(['git', 'fetch', '--tags'], check=True)
+    except subprocess.CalledProcessError as e:
+        print(f"Error fetching tags: {e.stderr}")
+
 def get_file_content(tag, file_path):
     try:
         result = subprocess.run(['git', 'show', f'{tag}:{file_path}'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True, text=True)
@@ -59,7 +65,8 @@ def find_mismatch(merged_array, db_array):
     return None, None, None
 
 def main():
-    # Example usage:
+    fetch_tags()
+
     array1, array2 = read_git_files('v1.0', 'v2.0', 'path/to/your/file.txt')
     print(array1)
     print(array2)
@@ -81,10 +88,8 @@ def main():
         print(f"Merged array row: {merged_row}")
         print(f"Database array row: {db_row}")
 
-        # Find the index of the first mismatch
         mismatch_index = merged_array.index(merged_row) if merged_row in merged_array else len(merged_array)
 
-        # Iterate from the first mismatch index to the end of merged_array
         for row in merged_array[mismatch_index:]:
             if row in db_array:
                 print(f"Row found in database: {row}")
