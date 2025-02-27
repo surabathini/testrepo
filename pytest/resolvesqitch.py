@@ -89,7 +89,7 @@ def stash_local_changes():
         result = subprocess.run(['git', 'status', '--porcelain'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True, text=True)
         if result.stdout.strip():
             stash_message = datetime.datetime.now().strftime('%Y_%m_%d') + " Changes squashed for sqitch compare"
-            subprocess.run(['git', 'stash', 'push', '-m', stash_message], check=True)
+            subprocess.run(['git', 'stash', 'push', '-m', stash_message, '--include-untracked'], check=True)
             print("Local changes stashed.")
         else:
             print("No local changes to stash.")
