@@ -1,6 +1,7 @@
 import subprocess
 import pandas as pd
 import psycopg2
+import datetime
 
 def fetch_tags():
     try:
@@ -83,8 +84,34 @@ def fetch_latest_content(branch_or_tag, file_path):
         print(f"Error fetching latest content for {branch_or_tag}: {e.stderr}")
         return []
 
+def stash_local_changes():
+    try:
+        result = subprocess.run(['git', 'status', '--porcelain'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True, text=True)
+        if result.stdout.strip():
+            stash_message = datetime.datetime.now().strftime('%Y_%m_%d') + " Changes squashed for sqitch compare"
+            subprocess.run(['git', 'stash', 'push', '-m', stash_message], check=True)
+            print("Local changes stashed.")
+        else:
+            print("No local changes to stash.")
+    except subprocess.CalledProcessError as e:
+        print(f"Error stashing local changes: {e.stderr}")
+
+def checkout_and_pull(branch):
+    try:
+        if not check_branch_or_tag_exists(branch):
+            subprocess.run(['git', 'checkout', '-b', branch, f'origin/{branch}'], check=True)
+        else:
+            subprocess.run(['git', 'checkout', branch], check=True)
+        subprocess.run(['git', 'pull', 'origin', branch], check=True)
+        print(f"Checked out and pulled {branch}.")
+    except subprocess.CalledProcessError as e:
+        print(f"Error checking out or pulling {branch}: {e.stderr}")
+
 def main():
     fetch_tags()
+    stash_local_changes()
+    checkout_and_pull('v2.0')
+    checkout_and_pull('v1.0')
 
     array1 = fetch_latest_content('v1.0', 'path/to/your/file.txt')
     array2 = fetch_latest_content('v2.0', 'path/to/your/file.txt')
