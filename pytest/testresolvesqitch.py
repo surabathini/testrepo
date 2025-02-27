@@ -1,5 +1,5 @@
 import pytest
-from pytest.resolvesqitch import get_file_content, extract_lines, read_git_files, merge_arrays, query_database, find_mismatch
+from pytest.resolvesqitch import get_file_content, extract_lines, read_git_files, merge_arrays, query_database, find_mismatch, fetch_latest_content, fetch_tags
 
 def test_get_file_content(mocker):
     mocker.patch('subprocess.run')
@@ -71,3 +71,33 @@ def test_find_mismatch_different_lengths():
     assert prior_row == 'line2'
     assert merged_row == ['line3']
     assert db_row == []
+
+def test_fetch_latest_content(mocker):
+    mocker.patch('subprocess.run')
+    subprocess.run.return_value.stdout = "line1\nline2\n"
+    subprocess.run.return_value.stderr = ""
+    subprocess.run.return_value.returncode = 0
+
+    result = fetch_latest_content('v1.0', 'path/to/your/file.txt')
+    assert result == ['line1', 'line2']
+
+def test_fetch_latest_content_error(mocker):
+    mocker.patch('subprocess.run')
+    subprocess.run.side_effect = subprocess.CalledProcessError(1, 'git', stderr='error')
+
+    result = fetch_latest_content('v1.0', 'path/to/your/file.txt')
+    assert result == []
+
+def test_fetch_tags(mocker):
+    mocker.patch('subprocess.run')
+    subprocess.run.return_value.returncode = 0
+
+    fetch_tags()
+    subprocess.run.assert_called_once_with(['git', 'fetch', '--tags'], check=True)
+
+def test_fetch_tags_error(mocker):
+    mocker.patch('subprocess.run')
+    subprocess.run.side_effect = subprocess.CalledProcessError(1, 'git', stderr='error')
+
+    fetch_tags()
+    subprocess.run.assert_called_once_with(['git', 'fetch', '--tags'], check=True)

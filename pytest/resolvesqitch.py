@@ -64,10 +64,20 @@ def find_mismatch(merged_array, db_array):
         return merged_array[min_length-1] if min_length > 0 else None, merged_array[min_length:], db_array[min_length:]
     return None, None, None
 
+def fetch_latest_content(branch_or_tag, file_path):
+    try:
+        subprocess.run(['git', 'fetch', 'origin', branch_or_tag], check=True)
+        result = subprocess.run(['git', 'show', f'origin/{branch_or_tag}:{file_path}'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True, text=True)
+        return result.stdout.splitlines()
+    except subprocess.CalledProcessError as e:
+        print(f"Error fetching latest content for {branch_or_tag}: {e.stderr}")
+        return []
+
 def main():
     fetch_tags()
 
-    array1, array2 = read_git_files('v1.0', 'v2.0', 'path/to/your/file.txt')
+    array1 = fetch_latest_content('v1.0', 'path/to/your/file.txt')
+    array2 = fetch_latest_content('v2.0', 'path/to/your/file.txt')
     print(array1)
     print(array2)
 
