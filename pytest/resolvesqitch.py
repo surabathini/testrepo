@@ -64,7 +64,17 @@ def find_mismatch(merged_array, db_array):
         return merged_array[min_length-1] if min_length > 0 else None, merged_array[min_length:], db_array[min_length:]
     return None, None, None
 
+def check_branch_or_tag_exists(branch_or_tag):
+    try:
+        subprocess.run(['git', 'rev-parse', '--verify', branch_or_tag], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True, text=True)
+        return True
+    except subprocess.CalledProcessError:
+        return False
+
 def fetch_latest_content(branch_or_tag, file_path):
+    if not check_branch_or_tag_exists(branch_or_tag):
+        print(f"Error: Branch or tag '{branch_or_tag}' does not exist.")
+        return []
     try:
         subprocess.run(['git', 'fetch', 'origin', branch_or_tag], check=True)
         result = subprocess.run(['git', 'show', f'origin/{branch_or_tag}:{file_path}'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True, text=True)

@@ -1,5 +1,5 @@
 import pytest
-from pytest.resolvesqitch import get_file_content, extract_lines, read_git_files, merge_arrays, query_database, find_mismatch, fetch_latest_content, fetch_tags
+from pytest.resolvesqitch import get_file_content, extract_lines, read_git_files, merge_arrays, query_database, find_mismatch, fetch_latest_content, fetch_tags, check_branch_or_tag_exists
 
 def test_get_file_content(mocker):
     mocker.patch('subprocess.run')
@@ -101,3 +101,17 @@ def test_fetch_tags_error(mocker):
 
     fetch_tags()
     subprocess.run.assert_called_once_with(['git', 'fetch', '--tags'], check=True)
+
+def test_check_branch_or_tag_exists(mocker):
+    mocker.patch('subprocess.run')
+    subprocess.run.return_value.returncode = 0
+
+    result = check_branch_or_tag_exists('v1.0')
+    assert result is True
+
+def test_check_branch_or_tag_exists_error(mocker):
+    mocker.patch('subprocess.run')
+    subprocess.run.side_effect = subprocess.CalledProcessError(1, 'git', stderr='error')
+
+    result = check_branch_or_tag_exists('v1.0')
+    assert result is False
